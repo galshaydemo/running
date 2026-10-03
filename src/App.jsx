@@ -24,6 +24,7 @@ const haversine = (a, b) => {
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 const KEY = 'run-walk-history'
+const version=2;
 const loadHistory = () => {
   try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] }
 }
@@ -224,7 +225,7 @@ export default function App() {
   if (!started) {
     return (
       <main className="card">
-        <h1>🏃 Run / Walk Planner</h1>
+        <h1>🏃 Run / Walk Planner{version}</h1>
         <label>Walking (minutes)
           <input type="number" min="1" value={walkMin} onChange={num(setWalkMin, 1, 60)} />
         </label>
