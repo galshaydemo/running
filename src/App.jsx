@@ -236,7 +236,7 @@ export default function App() {
           <input type="number" min="1" value={rounds} onChange={num(setRounds, 1, 50)} />
         </label>
         <label>Weight (kg)
-          <input type="number" min="30" value={weight} onChange={num(setWeight, 30, 250)} />
+          <input type="number" min="30" value={weight} onChange={setWeight} />
         </label>
         <label>Walking speed (km/h)
           <input type="number" min="1" step="0.5" value={walkKmh} onChange={num(setWalkKmh, 1, 10)} />
