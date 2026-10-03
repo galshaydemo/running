@@ -225,7 +225,7 @@ export default function App() {
   if (!started) {
     return (
       <main className="card">
-        <h1>🏃 Run / Walk Planner{version}</h1>
+        <h1>🏃 Run / Waklk Planner{version}</h1>
         <label>Walking (minutes)
           <input type="number" min="1" value={walkMin} onChange={num(setWalkMin, 1, 60)} />
         </label>
