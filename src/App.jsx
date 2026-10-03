@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { makeT } from './i18n.js'
 
 const fmt = (s) => {
   const m = Math.floor(s / 60)
@@ -24,7 +25,10 @@ const haversine = (a, b) => {
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 const KEY = 'run-walk-history'
-const version=2;
+const pref = (k, fallback) => {
+  try { return localStorage.getItem(k) || fallback } catch { return fallback }
+}
+const savePref = (k, v) => { try { localStorage.setItem(k, v) } catch {} }
 const loadHistory = () => {
   try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] }
 }
@@ -33,9 +37,10 @@ const storeHistory = (h) => {
 }
 const NO_GPS = { km: 0, kcal: 0, kmh: 0, acc: null, error: '' }
 
-function speak(text) {
+function speak(text, lang = 'en') {
   try {
     const u = new SpeechSynthesisUtterance(text)
+    u.lang = lang === 'he' ? 'he-IL' : 'en-US'
     u.rate = 0.95
     window.speechSynthesis.speak(u)
   } catch {}
@@ -77,7 +82,7 @@ function NumInput({ value, onChange, min, max, step = 1 }) {
 }
 
 const Stat = ({ label, value }) => (
-  <div className="stat"><b>{value}</b><span>{label}</span></div>
+  <div className="stat"><b dir="ltr">{value}</b><span>{label}</span></div>
 )
 
 export default function App() {
@@ -90,6 +95,19 @@ export default function App() {
   const [useGps, setUseGps] = useState(true)
   const [gps, setGps] = useState(NO_GPS)
   const lastPt = useRef(null)
+  const [lang, setLang] = useState(() => pref('lang', (navigator.language || '').startsWith('he') ? 'he' : 'en'))
+  const [theme, setTheme] = useState(() =>
+    pref('theme', window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark'))
+  const t = useMemo(() => makeT(lang), [lang])
+  useEffect(() => {
+    const d = document.documentElement
+    d.lang = lang
+    d.dir = lang === 'he' ? 'rtl' : 'ltr'
+    d.dataset.theme = theme
+    document.title = t('title')
+    savePref('lang', lang)
+    savePref('theme', theme)
+  }, [lang, theme, t])
   const [newVersion, setNewVersion] = useState(null)
   useEffect(() => {
     fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' })
@@ -149,7 +167,7 @@ export default function App() {
   // GPS tracking: accumulate distance/calories from real positions
   useEffect(() => {
     if (!started || ended || !useGps) return
-    if (!navigator.geolocation) { setGps((g) => ({ ...g, error: 'GPS not supported' })); return }
+    if (!navigator.geolocation) { setGps((g) => ({ ...g, error: t('gpsNS') })); return }
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude: lat, longitude: lon, accuracy } = pos.coords
@@ -213,9 +231,9 @@ export default function App() {
     const pace = useGps ? (gps.kmh ? 3600 / gps.kmh : 0) : shownAvg ? 3600 / shownAvg : 0
     const pm = Math.floor(pace / 60), ps = Math.round(pace % 60)
     speak(
-      `${mins} ${mins === 1 ? 'minute' : 'minutes'}. Distance ${shown.km.toFixed(2)} kilometers. ` +
-      `${Math.round(shown.kcal)} calories burned. ` +
-      (pace ? `Pace ${pm} minutes ${ps} seconds per kilometer.` : '')
+      t('speech', { m: mins, mw: t(mins === 1 ? 'minute' : 'minutes'), km: shown.km.toFixed(2), kcal: Math.round(shown.kcal) }) +
+        (pace ? t('speechPace', { pm, ps }) : ''),
+      lang
     )
   }, [elapsed])
 
@@ -232,17 +250,17 @@ export default function App() {
       kmh: shownAvg,
       gps: useGps,
       completed: done,
-      plan: `${walkMin}/${runMin} min × ${rounds}`,
+      plan: `${walkMin}/${runMin} × ${rounds}`,
     }
     setHistory((h) => { const n = [entry, ...h]; storeHistory(n); return n })
   }, [ended])
 
   const removeEntry = (id) => setHistory((h) => { const n = h.filter((e) => e.id !== id); storeHistory(n); return n })
   const clearHistory = () => {
-    if (window.confirm('Delete all saved workouts?')) { storeHistory([]); setHistory([]) }
+    if (window.confirm(t('confirmClear'))) { storeHistory([]); setHistory([]) }
   }
 
-  const start = () => { setGps(NO_GPS); lastPt.current = null; setStep(0); setLeft(plan[0].secs); setPaused(false); setStopped(false); savedRef.current = false; lastSpoken.current = 0; if (voice) speak(' '); setStarted(true) }
+  const start = () => { setGps(NO_GPS); lastPt.current = null; setStep(0); setLeft(plan[0].secs); setPaused(false); setStopped(false); savedRef.current = false; lastSpoken.current = 0; if (voice) speak(' ', lang); setStarted(true) }
   const reset = () => { setStarted(false); setPaused(false); setStopped(false); setStep(0) }
   const skip = () => {
     const next = step + 1
@@ -256,62 +274,68 @@ export default function App() {
       <main className="card">
         {newVersion && (
           <button className="primary" onClick={() => { location.href = `${location.pathname}?v=${newVersion}` }}>
-            New version {newVersion} available — tap to update
+            {t('newVer', { v: newVersion })}
           </button>
         )}
-        <h1>🏃 Run / Walk Planner <small className="ver">v{__APP_VERSION__}</small></h1>
-        <label>Walking (minutes)
+        <div className="toolbar">
+          <button onClick={() => setLang(lang === 'he' ? 'en' : 'he')}>{lang === 'he' ? 'EN' : 'עברית'}</button>
+          <button aria-label={t('theme')} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
+        <h1>🏃 {t('title')} <small className="ver">v{__APP_VERSION__}</small></h1>
+        <label>{t('walkMin')}
           <NumInput value={walkMin} onChange={setWalkMin} min={1} max={60} />
         </label>
-        <label>Running (minutes)
+        <label>{t('runMin')}
           <NumInput value={runMin} onChange={setRunMin} min={1} max={60} />
         </label>
-        <label>Rounds
+        <label>{t('rounds')}
           <NumInput value={rounds} onChange={setRounds} min={1} max={50} />
         </label>
-        <label>Weight (kg)
+        <label>{t('weight')}
           <NumInput value={weight} onChange={setWeight} min={30} max={250} />
         </label>
-        <label>Walking speed (km/h)
+        <label>{t('walkSpeed')}
           <NumInput value={walkKmh} onChange={setWalkKmh} min={1} max={10} step={0.5} />
         </label>
-        <label>Running speed (km/h)
+        <label>{t('runSpeed')}
           <NumInput value={runKmh} onChange={setRunKmh} min={4} max={25} step={0.5} />
         </label>
-        <label>Voice update every minute
+        <label>{t('voice')}
           <input type="checkbox" className="chk" checked={voice} onChange={(e) => setVoice(e.target.checked)} />
         </label>
-        <label>Track with GPS
+        <label>{t('gps')}
           <input type="checkbox" className="chk" checked={useGps} onChange={(e) => setUseGps(e.target.checked)} />
         </label>
         <p className="summary">
-          {walkMin} min walk → {runMin} min run, × {rounds} = <b>{fmt(total)}</b> total
+          {t('summary', { w: walkMin, r: runMin, n: rounds })} <b dir="ltr">{fmt(total)}</b> {t('total')}
         </p>
         <div className="stats">
-          <Stat label="Distance" value={`${planStats.km.toFixed(2)} km`} />
-          <Stat label="Calories" value={`${Math.round(planStats.kcal)} kcal`} />
-          <Stat label="Avg pace" value={`${paceStr(avgKmh)} /km`} />
+          <Stat label={t('distance')} value={`${planStats.km.toFixed(2)} km`} />
+          <Stat label={t('calories')} value={`${Math.round(planStats.kcal)} kcal`} />
+          <Stat label={t('avgPace')} value={`${paceStr(avgKmh)} /km`} />
         </div>
         <div className="timeline">
           {plan.map((s, i) => (
             <span key={i} className={s.type} style={{ flexGrow: s.secs }} />
           ))}
         </div>
-        <button className="primary" onClick={start}>Start</button>
+        <button className="primary" onClick={start}>{t('start')}</button>
         {history.length > 0 && (
           <section className="history">
-            <h2>History</h2>
+            <h2>{t('history')}</h2>
             {history.map((e) => (
               <div key={e.id} className="entry">
                 <div>
-                  <b>{new Date(e.date).toLocaleDateString()} {new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b>
-                  <small>{e.completed ? '✅ completed' : '⏹ stopped'} · {e.plan}{e.gps ? ' · GPS' : ''}</small>
-                  <small>{fmt(e.secs)} · {e.km.toFixed(2)} km · {Math.round(e.kcal)} kcal · {paceStr(e.kmh)} /km</small>
+                  <b>{new Date(e.date).toLocaleDateString(lang === 'he' ? 'he-IL' : undefined)} {new Date(e.date).toLocaleTimeString(lang === 'he' ? 'he-IL' : [], { hour: '2-digit', minute: '2-digit' })}</b>
+                  <small>{e.completed ? t('completed') : t('stoppedTag')} · {e.plan}{e.gps ? ' · GPS' : ''}</small>
+                  <small dir="ltr">{fmt(e.secs)} · {e.km.toFixed(2)} km · {Math.round(e.kcal)} kcal · {paceStr(e.kmh)} /km</small>
                 </div>
-                <button aria-label="Delete" onClick={() => removeEntry(e.id)}>✕</button>
+                <button aria-label={t('del')} onClick={() => removeEntry(e.id)}>✕</button>
               </div>
             ))}
-            <button onClick={clearHistory}>Clear history</button>
+            <button onClick={clearHistory}>{t('clear')}</button>
           </section>
         )}
       </main>
@@ -321,40 +345,40 @@ export default function App() {
   if (ended) {
     return (
       <main className="card done">
-        <h1>{done ? '🎉 Workout complete!' : '💾 Workout saved'}</h1>
-        <p>{fmt(elapsed)}{done ? ` · ${rounds} rounds` : ' (stopped early)'}{useGps ? ' · GPS' : ''}</p>
+        <h1>{done ? t('complete') : t('saved')}</h1>
+        <p><bdi>{fmt(elapsed)}</bdi>{done ? ` · ${t('roundsN', { n: rounds })}` : ` ${t('stoppedEarly')}`}{useGps ? ' · GPS' : ''}</p>
         <div className="stats">
-          <Stat label="Distance" value={`${shown.km.toFixed(2)} km`} />
-          <Stat label="Calories" value={`${Math.round(shown.kcal)} kcal`} />
-          <Stat label="Avg pace" value={`${paceStr(shownAvg)} /km`} />
+          <Stat label={t('distance')} value={`${shown.km.toFixed(2)} km`} />
+          <Stat label={t('calories')} value={`${Math.round(shown.kcal)} kcal`} />
+          <Stat label={t('avgPace')} value={`${paceStr(shownAvg)} /km`} />
         </div>
-        <button className="primary" onClick={reset}>Back to plan</button>
+        <button className="primary" onClick={reset}>{t('back')}</button>
       </main>
     )
   }
 
   return (
     <main className={`card ${current.type}`}>
-      <div className="phase">{current.type === 'walk' ? '🚶 WALK' : '🏃 RUN'}</div>
-      <div className="time">{fmt(left)}</div>
-      <p>Round {Math.floor(step / 2) + 1} of {rounds}</p>
+      <div className="phase">{current.type === 'walk' ? t('walkPhase') : t('runPhase')}</div>
+      <div className="time" dir="ltr">{fmt(left)}</div>
+      <p>{t('roundOf', { a: Math.floor(step / 2) + 1, b: rounds })}</p>
       <div className="stats">
-        <Stat label="Distance" value={`${shown.km.toFixed(2)} km`} />
-        <Stat label="Calories" value={`${Math.round(shown.kcal)} kcal`} />
-        <Stat label="Pace now" value={`${paceStr(useGps ? gps.kmh : current.type === 'run' ? runKmh : walkKmh)} /km`} />
-        <Stat label="Avg pace" value={`${paceStr(shownAvg)} /km`} />
+        <Stat label={t('distance')} value={`${shown.km.toFixed(2)} km`} />
+        <Stat label={t('calories')} value={`${Math.round(shown.kcal)} kcal`} />
+        <Stat label={t('paceNow')} value={`${paceStr(useGps ? gps.kmh : current.type === 'run' ? runKmh : walkKmh)} /km`} />
+        <Stat label={t('avgPace')} value={`${paceStr(shownAvg)} /km`} />
       </div>
       {useGps && (
         <p className="small">
-          {gps.error ? `GPS: ${gps.error}` : gps.acc === null ? 'GPS: waiting for signal…' : `GPS accuracy ±${gps.acc} m${gps.acc > 30 ? ' (weak, ignored)' : ''}`}
+          {gps.error ? `GPS: ${gps.error}` : gps.acc === null ? t('gpsWait') : `${t('gpsAcc', { a: gps.acc })}${gps.acc > 30 ? t('weak') : ''}`}
         </p>
       )}
       <div className="bar"><i style={{ width: `${(elapsed / total) * 100}%` }} /></div>
-      <p className="small">{fmt(elapsed)} / {fmt(total)}</p>
+      <p className="small" dir="ltr">{fmt(elapsed)} / {fmt(total)}</p>
       <div className="row">
-        <button onClick={() => setPaused(!paused)}>{paused ? 'Resume' : 'Pause'}</button>
-        <button onClick={skip}>Skip</button>
-        <button onClick={() => setStopped(true)}>Stop &amp; save</button>
+        <button onClick={() => setPaused(!paused)}>{paused ? t('resume') : t('pause')}</button>
+        <button onClick={skip}>{t('skip')}</button>
+        <button onClick={() => setStopped(true)}>{t('stop')}</button>
       </div>
     </main>
   )
