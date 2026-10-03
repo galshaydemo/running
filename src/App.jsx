@@ -29,6 +29,21 @@ const pref = (k, fallback) => {
   try { return localStorage.getItem(k) || fallback } catch { return fallback }
 }
 const savePref = (k, v) => { try { localStorage.setItem(k, v) } catch {} }
+
+// useState that survives reloads (all settings are saved as one JSON object)
+const SETTINGS_KEY = 'run-walk-settings'
+const readSettings = () => {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {} } catch { return {} }
+}
+const writeSetting = (name, value) => savePref(SETTINGS_KEY, JSON.stringify({ ...readSettings(), [name]: value }))
+function usePersistedState(name, initial) {
+  const [value, setValue] = useState(() => {
+    const v = readSettings()[name]
+    return v !== undefined && typeof v === typeof initial ? v : initial
+  })
+  useEffect(() => { writeSetting(name, value) }, [name, value])
+  return [value, setValue]
+}
 const loadHistory = () => {
   try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] }
 }
@@ -86,13 +101,13 @@ const Stat = ({ label, value }) => (
 )
 
 export default function App() {
-  const [walkMin, setWalkMin] = useState(2)
-  const [runMin, setRunMin] = useState(1)
-  const [rounds, setRounds] = useState(8)
-  const [weight, setWeight] = useState(85)
-  const [walkKmh, setWalkKmh] = useState(5)
-  const [runKmh, setRunKmh] = useState(9)
-  const [useGps, setUseGps] = useState(true)
+  const [walkMin, setWalkMin] = usePersistedState('walkMin', 2)
+  const [runMin, setRunMin] = usePersistedState('runMin', 1)
+  const [rounds, setRounds] = usePersistedState('rounds', 8)
+  const [weight, setWeight] = usePersistedState('weight', 85)
+  const [walkKmh, setWalkKmh] = usePersistedState('walkKmh', 5)
+  const [runKmh, setRunKmh] = usePersistedState('runKmh', 9)
+  const [useGps, setUseGps] = usePersistedState('useGps', true)
   const [gps, setGps] = useState(NO_GPS)
   const lastPt = useRef(null)
   const [lang, setLang] = useState(() => pref('lang', (navigator.language || '').startsWith('he') ? 'he' : 'en'))
@@ -116,7 +131,7 @@ export default function App() {
       .catch(() => {})
   }, [])
   const [history, setHistory] = useState(loadHistory)
-  const [voice, setVoice] = useState(true)
+  const [voice, setVoice] = usePersistedState('voice', true)
   const lastSpoken = useRef(0)
   const [stopped, setStopped] = useState(false)
   const savedRef = useRef(false)
