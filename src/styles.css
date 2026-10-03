@@ -1,0 +1,25 @@
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f172a; color: #fff; font-family: system-ui, sans-serif; }
+.card { width: min(92vw, 420px); padding: 28px; border-radius: 20px; background: #1e293b; display: flex; flex-direction: column; gap: 14px; text-align: center; transition: background .3s; }
+.card.walk { background: #0f766e; }
+.card.run { background: #c2410c; }
+.card.done { background: #4338ca; }
+h1 { margin: 0 0 6px; font-size: 1.6rem; }
+label { display: flex; justify-content: space-between; align-items: center; }
+input { width: 90px; padding: 8px; border-radius: 8px; border: 0; font-size: 1.1rem; text-align: center; }
+.summary { opacity: .85; }
+.timeline { display: flex; height: 12px; gap: 2px; border-radius: 6px; overflow: hidden; }
+.timeline .walk { background: #2dd4bf; } .timeline .run { background: #fb923c; }
+button { padding: 12px 18px; border: 0; border-radius: 12px; font-size: 1rem; cursor: pointer; background: rgba(255,255,255,.2); color: #fff; }
+button.primary { background: #22c55e; font-size: 1.2rem; font-weight: 700; }
+.phase { font-size: 2rem; font-weight: 800; letter-spacing: 2px; }
+.time { font-size: 5.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bar { height: 10px; background: rgba(255,255,255,.25); border-radius: 5px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: #fff; transition: width 1s linear; }
+.small { opacity: .8; margin: 0; }
+.row { display: flex; gap: 10px; justify-content: center; }
+
+.stats { display: flex; gap: 8px; justify-content: space-between; }
+.stat { flex: 1; background: rgba(255,255,255,.15); border-radius: 10px; padding: 8px 4px; display: flex; flex-direction: column; }
+.stat b { font-size: 1rem; } .stat span { font-size: .75rem; opacity: .8; }
+.chk { width: 24px; height: 24px; }
