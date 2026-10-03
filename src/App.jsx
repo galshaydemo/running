@@ -23,6 +23,13 @@ const haversine = (a, b) => {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2
   return 2 * R * Math.asin(Math.sqrt(h))
 }
+const KEY = 'run-walk-history'
+const loadHistory = () => {
+  try { return JSON.parse(localStorage.getItem(KEY)) || [] } catch { return [] }
+}
+const storeHistory = (h) => {
+  try { localStorage.setItem(KEY, JSON.stringify(h)) } catch {}
+}
 const NO_GPS = { km: 0, kcal: 0, kmh: 0, acc: null, error: '' }
 
 function beep(freq = 880, ms = 200) {
@@ -51,6 +58,9 @@ export default function App() {
   const [useGps, setUseGps] = useState(true)
   const [gps, setGps] = useState(NO_GPS)
   const lastPt = useRef(null)
+  const [history, setHistory] = useState(loadHistory)
+  const [stopped, setStopped] = useState(false)
+  const savedRef = useRef(false)
   const [started, setStarted] = useState(false)
   const [paused, setPaused] = useState(false)
   const [step, setStep] = useState(0)
@@ -68,6 +78,7 @@ export default function App() {
 
   const total = plan.reduce((a, s) => a + s.secs, 0)
   const done = !!started && step >= plan.length
+  const ended = done || stopped
   const current = plan[step]
   const elapsed = plan.slice(0, step).reduce((a, s) => a + s.secs, 0) + (current ? current.secs - left : 0)
 
@@ -88,7 +99,6 @@ export default function App() {
   const live = current ? stats(plan.slice(0, step + 1), current.secs - left) : planStats
   const shown = useGps ? gps : live
   const shownAvg = elapsed ? (shown.km / elapsed) * 3600 : 0
-  const final = useGps ? gps : planStats
 
   const stepRef = useRef(step)
   stepRef.current = step
@@ -97,7 +107,7 @@ export default function App() {
 
   // GPS tracking: accumulate distance/calories from real positions
   useEffect(() => {
-    if (!started || done || !useGps) return
+    if (!started || ended || !useGps) return
     if (!navigator.geolocation) { setGps((g) => ({ ...g, error: 'GPS not supported' })); return }
     const id = navigator.geolocation.watchPosition(
       (pos) => {
@@ -126,21 +136,21 @@ export default function App() {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     )
     return () => navigator.geolocation.clearWatch(id)
-  }, [started, done, useGps])
+  }, [started, ended, useGps])
 
   // keep the phone screen on during the workout
   useEffect(() => {
-    if (!started || done || !navigator.wakeLock) return
+    if (!started || ended || !navigator.wakeLock) return
     let lock
     const get = () => navigator.wakeLock.request('screen').then((l) => (lock = l)).catch(() => {})
     get()
     const vis = () => document.visibilityState === 'visible' && get()
     document.addEventListener('visibilitychange', vis)
     return () => { document.removeEventListener('visibilitychange', vis); lock?.release() }
-  }, [started, done])
+  }, [started, ended])
 
   useEffect(() => {
-    if (!started || paused || done) return
+    if (!started || paused || ended) return
     const id = setInterval(() => {
       setLeft((l) => {
         if (l > 1) { if (l <= 4) beep(660, 100); return l - 1 }
@@ -151,10 +161,33 @@ export default function App() {
       })
     }, 1000)
     return () => clearInterval(id)
-  }, [started, paused, done, plan])
+  }, [started, paused, ended, plan])
 
-  const start = () => { setGps(NO_GPS); lastPt.current = null; setStep(0); setLeft(plan[0].secs); setPaused(false); setStarted(true) }
-  const reset = () => { setStarted(false); setPaused(false); setStep(0) }
+  // save the workout once, when it completes or is stopped
+  useEffect(() => {
+    if (!ended || savedRef.current || elapsed < 5) return
+    savedRef.current = true
+    const entry = {
+      id: Date.now(),
+      date: new Date().toISOString(),
+      secs: elapsed,
+      km: shown.km,
+      kcal: shown.kcal,
+      kmh: shownAvg,
+      gps: useGps,
+      completed: done,
+      plan: `${walkMin}/${runMin} min × ${rounds}`,
+    }
+    setHistory((h) => { const n = [entry, ...h]; storeHistory(n); return n })
+  }, [ended])
+
+  const removeEntry = (id) => setHistory((h) => { const n = h.filter((e) => e.id !== id); storeHistory(n); return n })
+  const clearHistory = () => {
+    if (window.confirm('Delete all saved workouts?')) { storeHistory([]); setHistory([]) }
+  }
+
+  const start = () => { setGps(NO_GPS); lastPt.current = null; setStep(0); setLeft(plan[0].secs); setPaused(false); setStopped(false); savedRef.current = false; setStarted(true) }
+  const reset = () => { setStarted(false); setPaused(false); setStopped(false); setStep(0) }
   const skip = () => {
     const next = step + 1
     setStep(next)
@@ -202,19 +235,35 @@ export default function App() {
           ))}
         </div>
         <button className="primary" onClick={start}>Start</button>
+        {history.length > 0 && (
+          <section className="history">
+            <h2>History</h2>
+            {history.map((e) => (
+              <div key={e.id} className="entry">
+                <div>
+                  <b>{new Date(e.date).toLocaleDateString()} {new Date(e.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b>
+                  <small>{e.completed ? '✅ completed' : '⏹ stopped'} · {e.plan}{e.gps ? ' · GPS' : ''}</small>
+                  <small>{fmt(e.secs)} · {e.km.toFixed(2)} km · {Math.round(e.kcal)} kcal · {paceStr(e.kmh)} /km</small>
+                </div>
+                <button aria-label="Delete" onClick={() => removeEntry(e.id)}>✕</button>
+              </div>
+            ))}
+            <button onClick={clearHistory}>Clear history</button>
+          </section>
+        )}
       </main>
     )
   }
 
-  if (done) {
+  if (ended) {
     return (
       <main className="card done">
-        <h1>🎉 Workout complete!</h1>
-        <p>{rounds} rounds · {fmt(total)}{useGps ? ' · GPS' : ''}</p>
+        <h1>{done ? '🎉 Workout complete!' : '💾 Workout saved'}</h1>
+        <p>{fmt(elapsed)}{done ? ` · ${rounds} rounds` : ' (stopped early)'}{useGps ? ' · GPS' : ''}</p>
         <div className="stats">
-          <Stat label="Distance" value={`${final.km.toFixed(2)} km`} />
-          <Stat label="Calories" value={`${Math.round(final.kcal)} kcal`} />
-          <Stat label="Avg pace" value={`${paceStr(useGps ? shownAvg : avgKmh)} /km`} />
+          <Stat label="Distance" value={`${shown.km.toFixed(2)} km`} />
+          <Stat label="Calories" value={`${Math.round(shown.kcal)} kcal`} />
+          <Stat label="Avg pace" value={`${paceStr(shownAvg)} /km`} />
         </div>
         <button className="primary" onClick={reset}>Back to plan</button>
       </main>
@@ -242,7 +291,7 @@ export default function App() {
       <div className="row">
         <button onClick={() => setPaused(!paused)}>{paused ? 'Resume' : 'Pause'}</button>
         <button onClick={skip}>Skip</button>
-        <button onClick={reset}>Stop</button>
+        <button onClick={() => setStopped(true)}>Stop &amp; save</button>
       </div>
     </main>
   )
