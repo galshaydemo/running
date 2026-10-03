@@ -32,6 +32,14 @@ const storeHistory = (h) => {
 }
 const NO_GPS = { km: 0, kcal: 0, kmh: 0, acc: null, error: '' }
 
+function speak(text) {
+  try {
+    const u = new SpeechSynthesisUtterance(text)
+    u.rate = 0.95
+    window.speechSynthesis.speak(u)
+  } catch {}
+}
+
 function beep(freq = 880, ms = 200) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)()
@@ -59,6 +67,8 @@ export default function App() {
   const [gps, setGps] = useState(NO_GPS)
   const lastPt = useRef(null)
   const [history, setHistory] = useState(loadHistory)
+  const [voice, setVoice] = useState(true)
+  const lastSpoken = useRef(0)
   const [stopped, setStopped] = useState(false)
   const savedRef = useRef(false)
   const [started, setStarted] = useState(false)
@@ -163,6 +173,21 @@ export default function App() {
     return () => clearInterval(id)
   }, [started, paused, ended, plan])
 
+  // every full minute: announce distance, calories and pace
+  useEffect(() => {
+    if (!voice || !started || paused || ended || elapsed < 60 || elapsed % 60 !== 0) return
+    if (lastSpoken.current === elapsed) return
+    lastSpoken.current = elapsed
+    const mins = elapsed / 60
+    const pace = useGps ? (gps.kmh ? 3600 / gps.kmh : 0) : shownAvg ? 3600 / shownAvg : 0
+    const pm = Math.floor(pace / 60), ps = Math.round(pace % 60)
+    speak(
+      `${mins} ${mins === 1 ? 'minute' : 'minutes'}. Distance ${shown.km.toFixed(2)} kilometers. ` +
+      `${Math.round(shown.kcal)} calories burned. ` +
+      (pace ? `Pace ${pm} minutes ${ps} seconds per kilometer.` : '')
+    )
+  }, [elapsed])
+
   // save the workout once, when it completes or is stopped
   useEffect(() => {
     if (!ended || savedRef.current || elapsed < 5) return
@@ -186,7 +211,7 @@ export default function App() {
     if (window.confirm('Delete all saved workouts?')) { storeHistory([]); setHistory([]) }
   }
 
-  const start = () => { setGps(NO_GPS); lastPt.current = null; setStep(0); setLeft(plan[0].secs); setPaused(false); setStopped(false); savedRef.current = false; setStarted(true) }
+  const start = () => { setGps(NO_GPS); lastPt.current = null; setStep(0); setLeft(plan[0].secs); setPaused(false); setStopped(false); savedRef.current = false; lastSpoken.current = 0; if (voice) speak(' '); setStarted(true) }
   const reset = () => { setStarted(false); setPaused(false); setStopped(false); setStep(0) }
   const skip = () => {
     const next = step + 1
@@ -217,6 +242,9 @@ export default function App() {
         </label>
         <label>Running speed (km/h)
           <input type="number" min="4" step="0.5" value={runKmh} onChange={num(setRunKmh, 4, 25)} />
+        </label>
+        <label>Voice update every minute
+          <input type="checkbox" className="chk" checked={voice} onChange={(e) => setVoice(e.target.checked)} />
         </label>
         <label>Track with GPS
           <input type="checkbox" className="chk" checked={useGps} onChange={(e) => setUseGps(e.target.checked)} />
