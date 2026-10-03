@@ -53,6 +53,29 @@ function beep(freq = 880, ms = 200) {
   navigator.vibrate?.(200)
 }
 
+// number field that lets you type freely and clamps to the range when you leave it
+function NumInput({ value, onChange, min, max, step = 1 }) {
+  const [text, setText] = useState(String(value))
+  useEffect(() => { setText(String(value)) }, [value])
+  const commit = () => {
+    const n = Number(text)
+    const v = Math.max(min, Math.min(max, Number.isFinite(n) && text !== '' ? n : value))
+    onChange(v)
+    setText(String(v))
+  }
+  return (
+    <input
+      type="number" inputMode="decimal" min={min} max={max} step={step} value={text}
+      onChange={(e) => {
+        setText(e.target.value)
+        const n = Number(e.target.value)
+        if (e.target.value !== '' && n >= min && n <= max) onChange(n)
+      }}
+      onBlur={commit}
+    />
+  )
+}
+
 const Stat = ({ label, value }) => (
   <div className="stat"><b>{value}</b><span>{label}</span></div>
 )
@@ -227,7 +250,6 @@ export default function App() {
     setLeft(plan[next]?.secs ?? 0)
   }
 
-  const num = (set, min, max) => (e) => set(Math.max(min, Math.min(max, Number(e.target.value) || min)))
 
   if (!started) {
     return (
@@ -239,22 +261,22 @@ export default function App() {
         )}
         <h1>🏃 Run / Walk Planner <small className="ver">v{__APP_VERSION__}</small></h1>
         <label>Walking (minutes)
-          <input type="number" min="1" value={walkMin} onChange={num(setWalkMin, 1, 60)} />
+          <NumInput value={walkMin} onChange={setWalkMin} min={1} max={60} />
         </label>
         <label>Running (minutes)
-          <input type="number" min="1" value={runMin} onChange={num(setRunMin, 1, 60)} />
+          <NumInput value={runMin} onChange={setRunMin} min={1} max={60} />
         </label>
         <label>Rounds
-          <input type="number" min="1" value={rounds} onChange={num(setRounds, 1, 50)} />
+          <NumInput value={rounds} onChange={setRounds} min={1} max={50} />
         </label>
         <label>Weight (kg)
-          <input type="number" min="30" value={weight} onChange={setWeight} />
+          <NumInput value={weight} onChange={setWeight} min={30} max={250} />
         </label>
         <label>Walking speed (km/h)
-          <input type="number" min="1" step="0.5" value={walkKmh} onChange={num(setWalkKmh, 1, 10)} />
+          <NumInput value={walkKmh} onChange={setWalkKmh} min={1} max={10} step={0.5} />
         </label>
         <label>Running speed (km/h)
-          <input type="number" min="4" step="0.5" value={runKmh} onChange={num(setRunKmh, 4, 25)} />
+          <NumInput value={runKmh} onChange={setRunKmh} min={4} max={25} step={0.5} />
         </label>
         <label>Voice update every minute
           <input type="checkbox" className="chk" checked={voice} onChange={(e) => setVoice(e.target.checked)} />
