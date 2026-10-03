@@ -6,6 +6,14 @@ const { version } = JSON.parse(readFileSync('./package.json', 'utf8'))
 
 export default defineConfig({
   base: './',
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'emit-version',
+      generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version }) })
+      },
+    },
+  ],
   define: { __APP_VERSION__: JSON.stringify(version) },
 })

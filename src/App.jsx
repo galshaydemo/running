@@ -67,6 +67,13 @@ export default function App() {
   const [useGps, setUseGps] = useState(true)
   const [gps, setGps] = useState(NO_GPS)
   const lastPt = useRef(null)
+  const [newVersion, setNewVersion] = useState(null)
+  useEffect(() => {
+    fetch(`./version.json?t=${Date.now()}`, { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => { if (j.version && j.version !== __APP_VERSION__) setNewVersion(j.version) })
+      .catch(() => {})
+  }, [])
   const [history, setHistory] = useState(loadHistory)
   const [voice, setVoice] = useState(true)
   const lastSpoken = useRef(0)
@@ -225,6 +232,11 @@ export default function App() {
   if (!started) {
     return (
       <main className="card">
+        {newVersion && (
+          <button className="primary" onClick={() => { location.href = `${location.pathname}?v=${newVersion}` }}>
+            New version {newVersion} available — tap to update
+          </button>
+        )}
         <h1>🏃 Run / Walk Planner <small className="ver">v{__APP_VERSION__}</small></h1>
         <label>Walking (minutes)
           <input type="number" min="1" value={walkMin} onChange={num(setWalkMin, 1, 60)} />
